@@ -143,6 +143,12 @@ PackyCode provides special discounts for our software users: register using <a h
 
 CLIProxyAPI Guides: [https://help.router-for.me/](https://help.router-for.me/)
 
+## Relaydeck management UI
+
+This fork serves Relaydeck at `http://127.0.0.1:8317/management.html`: a simple page for connecting subscriptions, adding provider API keys, pointing tools at the relay, and seeing how pooled accounts share traffic. It is built into the binary, so nothing is downloaded for it. Set `management.secret-key` and sign in with that key. The full upstream panel stays one click away at `/management-advanced.html`.
+
+Build, test and development instructions are in [web/relaydeck/README.md](web/relaydeck/README.md).
+
 ## Management API
 
 see [MANAGEMENT_API.md](https://help.router-for.me/management/api)

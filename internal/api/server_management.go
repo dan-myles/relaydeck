@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/router-for-me/CLIProxyAPI/v8/internal/managementasset"
+	"github.com/router-for-me/CLIProxyAPI/v8/internal/relaydeck"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -309,7 +311,68 @@ func (s *Server) pluginResourceNoRoute(c *gin.Context) {
 	c.AbortWithStatus(http.StatusNotFound)
 }
 
+// controlPanelAvailable reports whether the management UI routes may serve.
+func (s *Server) controlPanelAvailable() bool {
+	cfg := s.getConfig()
+	return cfg != nil && !cfg.Home.Enabled && !cfg.RemoteManagement.DisableControlPanel
+}
+
+// serveManagementControlPanel serves Relaydeck, the UI embedded in the binary.
+// The safe-mode configure link keeps opening the full panel, which is where
+// template access keys are replaced.
 func (s *Server) serveManagementControlPanel(c *gin.Context) {
+	if !s.controlPanelAvailable() {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	if c.Query("safe-mode") == "configure" {
+		s.serveAdvancedManagementPanel(c)
+		return
+	}
+	page, err := relaydeck.IndexHTML()
+	if err != nil {
+		log.WithError(err).Error("failed to read embedded Relaydeck page")
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	relaydeck.SetPageHeaders(c.Writer.Header())
+	c.Status(http.StatusOK)
+	if c.Request.Method != http.MethodHead {
+		_, _ = c.Writer.Write(page)
+	}
+}
+
+// serveRelaydeckAsset serves the hashed scripts, styles, fonts and artwork of
+// the embedded Relaydeck bundle.
+func (s *Server) serveRelaydeckAsset(c *gin.Context) {
+	if !s.controlPanelAvailable() {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	file, info, err := relaydeck.OpenAsset(c.Param("filepath"))
+	if err != nil {
+		c.AbortWithStatus(http.StatusNotFound)
+		return
+	}
+	defer func() {
+		if errClose := file.Close(); errClose != nil {
+			log.WithError(errClose).Debug("failed to close Relaydeck asset")
+		}
+	}()
+	seeker, ok := file.(io.ReadSeeker)
+	if !ok {
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return
+	}
+	// File names carry a content hash, so they never change in place.
+	c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	c.Header("X-Content-Type-Options", "nosniff")
+	http.ServeContent(c.Writer, c.Request, info.Name(), info.ModTime(), seeker)
+}
+
+// serveAdvancedManagementPanel serves the full management panel downloaded
+// from management.panel-github-repository, from this relay's own origin.
+func (s *Server) serveAdvancedManagementPanel(c *gin.Context) {
 	cfg := s.getConfig()
 	if cfg == nil || cfg.Home.Enabled || cfg.RemoteManagement.DisableControlPanel {
 		c.AbortWithStatus(http.StatusNotFound)

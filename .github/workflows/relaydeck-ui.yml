@@ -1,0 +1,31 @@
+name: relaydeck-ui
+
+on:
+  pull_request:
+    paths:
+      - "web/relaydeck/**"
+      - "internal/relaydeck/**"
+      - ".github/workflows/relaydeck-ui.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/relaydeck
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/relaydeck/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Typecheck, test, build and compare embedded bundle
+        run: npm run check
