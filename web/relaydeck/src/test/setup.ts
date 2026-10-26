@@ -1,0 +1,9 @@
+import { afterEach } from "vitest";
+import { cleanup } from "@testing-library/react";
+
+afterEach(() => {
+  cleanup();
+  window.sessionStorage.clear();
+  window.localStorage.clear();
+  window.location.hash = "";
+});
