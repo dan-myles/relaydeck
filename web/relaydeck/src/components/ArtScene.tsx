@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { useId, type CSSProperties } from "react";
 import panoramaUrl from "../assets/night-wires-panorama.webp";
 import verticalUrl from "../assets/night-wires-vertical.webp";
 
@@ -55,13 +55,16 @@ const VERTICAL: Scene = {
 
 export function ArtScene({ art, animating, className = "" }: { art: "panorama" | "vertical"; animating: boolean; className?: string }) {
   const scene = art === "panorama" ? PANORAMA : VERTICAL;
+  // Each instance needs its own gradient id; hidden copies would otherwise
+  // capture the reference.
+  const gradientId = `lamp-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   return (
     <div className={`art-scene ${animating ? "is-moving" : "is-still"} ${className}`} aria-hidden>
       <div className="art-drift">
         <img className="art-image" src={scene.src} alt="" width={scene.width} height={scene.height} decoding="async" />
         <svg className="art-overlay" viewBox={`0 0 ${scene.width} ${scene.height}`} preserveAspectRatio="xMidYMid slice">
           <defs>
-            <radialGradient id={`lamp-${art}`}>
+            <radialGradient id={gradientId}>
               <stop offset="0" stopColor="#FF7FB6" stopOpacity="0.55" />
               <stop offset="1" stopColor="#FF4F9A" stopOpacity="0" />
             </radialGradient>
@@ -73,7 +76,7 @@ export function ArtScene({ art, animating, className = "" }: { art: "panorama" |
               cx={lamp.x}
               cy={lamp.y}
               r={lamp.r}
-              fill={`url(#lamp-${art})`}
+              fill={`url(#${gradientId})`}
               style={{ animationDelay: `${lamp.delay}s` } as CSSProperties}
             />
           ))}

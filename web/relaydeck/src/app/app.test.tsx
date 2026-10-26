@@ -104,11 +104,21 @@ describe("Relaydeck app", () => {
     expect(calls.some((call) => call.path.includes("/observability/usage/queue"))).toBe(false);
   });
 
-  it("returns to sign-in when the key stops working", async () => {
-    fakeRelay({ "GET /v8/management/credentials": { status: 401, body: { error: "invalid management key" } } });
-    window.sessionStorage.setItem("relaydeck.management-key", "stale");
+  it("checks a remembered key with one request before loading anything", async () => {
+    const { calls } = fakeRelay({ "GET /v8/management/credentials": { status: 401, body: { error: "invalid management key" } } });
+    window.localStorage.setItem("relaydeck.management-key", "stale");
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Sign in to your relay" })).toBeTruthy();
-    expect(window.sessionStorage.getItem("relaydeck.management-key")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("wasn't accepted");
+    expect(window.localStorage.getItem("relaydeck.management-key")).toBeNull();
+    expect(calls).toHaveLength(1);
+  });
+
+  it("explains a lockout instead of retrying", async () => {
+    const { calls } = fakeRelay({ "GET /v8/management/credentials": { status: 403, body: { error: "IP banned due to too many failed attempts. Try again in 29m" } } });
+    window.sessionStorage.setItem("relaydeck.management-key", "stale");
+    render(<App />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Too many wrong keys");
+    expect(calls).toHaveLength(1);
   });
 });

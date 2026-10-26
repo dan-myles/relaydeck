@@ -56,11 +56,12 @@ export function summariseUsage(accounts: Account[], range: UsageRange): UsageSum
     let requests = 0;
     let failed = 0;
     const perBucket = buckets.map(() => ({ success: 0, failed: 0 }));
-    recent.forEach((bucket, index) => {
-      // Align by label: accounts loaded at the same instant share labels.
-      const slot = labels.indexOf(bucket.time);
-      const target = slot >= 0 ? slot : index;
-      if (target >= buckets.length) return;
+    recent.forEach((bucket) => {
+      // Align by label. Counters for keys and subscriptions come from two
+      // requests that can straddle a 10-minute boundary; a bucket the
+      // reference doesn't have yet is left for the next refresh.
+      const target = labels.indexOf(bucket.time);
+      if (target < 0) return;
       perBucket[target] = { success: bucket.success, failed: bucket.failed };
       buckets[target].byAccount.set(account.id, perBucket[target]);
       buckets[target].success += bucket.success;

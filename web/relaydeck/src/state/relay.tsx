@@ -28,7 +28,7 @@ export function RelayProvider({
   children,
 }: {
   client: ManagementClient;
-  onUnauthorized: () => void;
+  onUnauthorized: (error: ApiError) => void;
   onSignOut: () => void;
   children: ReactNode;
 }) {
@@ -54,7 +54,7 @@ export function RelayProvider({
           setAccounts([...subscriptions, ...keyAccounts(keys[0], keys[1])]);
           setKeysError(null);
         } else {
-          if (keys instanceof ApiError && keys.kind === "unauthorized") throw keys;
+          if (keys instanceof ApiError && (keys.kind === "unauthorized" || keys.kind === "forbidden")) throw keys;
           // Keep the last known keys rather than dropping them from view.
           setAccounts((current) => [...subscriptions, ...current.filter((account) => account.source === "config-key")]);
           setKeysError(keys);
@@ -62,8 +62,8 @@ export function RelayProvider({
         setUpdatedAt(now);
         setError(null);
       } catch (err) {
-        if (err instanceof ApiError && err.kind === "unauthorized") {
-          onUnauthorized();
+        if (err instanceof ApiError && (err.kind === "unauthorized" || err.kind === "forbidden")) {
+          onUnauthorized(err);
           return;
         }
         setError(err);

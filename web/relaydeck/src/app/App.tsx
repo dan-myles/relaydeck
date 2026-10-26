@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react";
-import { ManagementClient } from "../api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ApiError, ManagementClient } from "../api/client";
 import { useMotion, type MotionState } from "../lib/motion";
 import { clearStoredKey, loadStoredKey, storeKey } from "../lib/session";
 import { RecordsProvider } from "../state/records";
@@ -9,35 +9,86 @@ import { ToastProvider } from "../components/Toast";
 import { SetupPage } from "../pages/SetupPage";
 import { UsagePage } from "../pages/UsagePage";
 import { CompactSignOut, CompactTopBar, Dock, RunningChip, TabBar } from "./Chrome";
-import { Login } from "./Login";
+import { Login, loginErrorMessage } from "./Login";
 import { useRoute, type Route } from "./route";
 
+interface Session {
+  key: string;
+  verified: boolean;
+}
+
 export function App() {
-  const [key, setKey] = useState<string | null>(() => loadStoredKey());
+  const [session, setSession] = useState<Session | null>(() => {
+    const stored = loadStoredKey();
+    return stored ? { key: stored, verified: false } : null;
+  });
+  const [notice, setNotice] = useState<string | null>(null);
   const motion = useMotion();
-  const client = useMemo(() => (key ? new ManagementClient(key) : null), [key]);
+  const client = useMemo(() => (session?.verified ? new ManagementClient(session.key) : null), [session]);
 
   const signOut = useCallback(() => {
     clearStoredKey();
-    setKey(null);
+    setNotice(null);
+    setSession(null);
   }, []);
+
+  const rejected = useCallback((error: unknown) => {
+    clearStoredKey();
+    setNotice(loginErrorMessage(error));
+    setSession(null);
+  }, []);
+
+  // A remembered key is checked with a single request before anything else
+  // runs, so a rotated key costs one failed attempt instead of a burst that
+  // trips the relay's lockout for wrong keys.
+  useEffect(() => {
+    if (!session || session.verified) return;
+    let cancelled = false;
+    new ManagementClient(session.key).request("/credentials?page=1&page_size=1").then(
+      () => {
+        if (!cancelled) setSession({ key: session.key, verified: true });
+      },
+      (error: unknown) => {
+        if (cancelled) return;
+        if (error instanceof ApiError && (error.kind === "network" || error.kind === "server")) {
+          // The relay is down or failing; the shell shows that and retries.
+          setSession({ key: session.key, verified: true });
+          return;
+        }
+        rejected(error);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [session, rejected]);
 
   if (!client) {
     return (
       <>
         <ArtScene art="panorama" animating={motion.animating} className="art-fixed" />
-        <Login
-          onSignedIn={(value, remember) => {
-            storeKey(value, remember);
-            setKey(value);
-          }}
-        />
+        {session ? (
+          <main className="login">
+            <div className="login-card glass" aria-busy="true" role="status">
+              Connecting to your relay…
+            </div>
+          </main>
+        ) : (
+          <Login
+            initialError={notice}
+            onSignedIn={(value, remember) => {
+              storeKey(value, remember);
+              setNotice(null);
+              setSession({ key: value, verified: true });
+            }}
+          />
+        )}
       </>
     );
   }
 
   return (
-    <RelayProvider client={client} onUnauthorized={signOut} onSignOut={signOut}>
+    <RelayProvider client={client} onUnauthorized={rejected} onSignOut={signOut}>
       <RecordsProvider client={client}>
         <ToastProvider>
           <Shell motion={motion} />

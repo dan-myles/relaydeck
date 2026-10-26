@@ -160,14 +160,23 @@ export function AddKeyDialog({ client, onClose, onSaved }: { client: ManagementC
           <>
             <label className="field">
               <span className="field-label">Name</span>
-              <input className="input" value={name} onChange={(event) => setName(event.target.value)} placeholder="OpenRouter" disabled={busy} />
+              <input className="input" value={name} onChange={(event) => {
+                  setName(event.target.value);
+                  if (phase.step !== "form") setPhase({ step: "form" });
+                }}
+                placeholder="OpenRouter"
+                disabled={busy}
+              />
             </label>
             <label className="field">
               <span className="field-label">Endpoint</span>
               <input
                 className="input mono"
                 value={baseUrl}
-                onChange={(event) => setBaseUrl(event.target.value)}
+                onChange={(event) => {
+                  setBaseUrl(event.target.value);
+                  if (phase.step !== "form") setPhase({ step: "form" });
+                }}
                 placeholder="https://openrouter.ai/api/v1"
                 spellCheck={false}
                 autoComplete="off"

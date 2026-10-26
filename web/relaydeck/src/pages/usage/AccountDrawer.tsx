@@ -31,11 +31,19 @@ export function AccountDrawer({
   strategy: { name: string };
   onClose: () => void;
 }) {
-  const { client, refresh } = useRelay();
+  const { client, refresh, loaded } = useRelay();
   const records = useRecords();
   const toast = useToast();
   const [optIn, setOptIn] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  if (!account && !loaded) {
+    return (
+      <Dialog title="Loading account" variant="drawer" onClose={onClose}>
+        <div className="list-skeleton tall" aria-busy="true" aria-label="Loading account" />
+      </Dialog>
+    );
+  }
 
   if (!account) {
     return (

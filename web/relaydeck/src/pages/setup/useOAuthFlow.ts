@@ -32,6 +32,9 @@ export function oauthErrorMessage(raw: string): string {
 export function useOAuthFlow(client: ManagementClient, onConnected: () => void) {
   const [flow, setFlow] = useState<OAuthFlowState>({ phase: "idle" });
   const popup = useRef<Window | null>(null);
+  // Bumped by every begin, cancel and reset, so a start that resolves after
+  // the user moved on is recognised as stale.
+  const attempt = useRef(0);
   const onConnectedRef = useRef(onConnected);
   onConnectedRef.current = onConnected;
 
@@ -45,9 +48,16 @@ export function useOAuthFlow(client: ManagementClient, onConnected: () => void) 
         win = null;
       }
       popup.current = win;
+      const current = ++attempt.current;
       setFlow({ phase: "starting", provider, reconnect });
       try {
         const started = await startOAuth(client, provider);
+        if (current !== attempt.current) {
+          // Cancelled while starting: end the session the relay just opened.
+          win?.close();
+          await cancelOAuth(client, started.state!).catch(() => undefined);
+          return;
+        }
         let opened = false;
         if (win && !win.closed) {
           win.opener = null;
@@ -65,6 +75,7 @@ export function useOAuthFlow(client: ManagementClient, onConnected: () => void) 
         });
       } catch (error) {
         win?.close();
+        if (current !== attempt.current) return;
         const message =
           error instanceof ApiError && error.code === "provider_not_found"
             ? "This relay doesn't offer that sign-in. It may need a newer version or a plugin."
@@ -118,6 +129,7 @@ export function useOAuthFlow(client: ManagementClient, onConnected: () => void) 
   }, [client, waitingState]);
 
   const cancel = useCallback(async () => {
+    attempt.current += 1;
     const current = flow;
     setFlow({ phase: "idle" });
     popup.current?.close();
@@ -132,6 +144,7 @@ export function useOAuthFlow(client: ManagementClient, onConnected: () => void) 
   }, [client, flow]);
 
   const reset = useCallback(() => {
+    attempt.current += 1;
     popup.current = null;
     setFlow({ phase: "idle" });
   }, []);

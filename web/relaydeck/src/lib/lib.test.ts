@@ -138,6 +138,14 @@ describe("summariseUsage", () => {
     expect(hour.lifetime).toBe(1010);
     expect(summariseUsage([a, b], "3h").buckets).toHaveLength(18);
   });
+
+  it("does not double-count a bucket newer than the reference", () => {
+    const a = toAccount(credential({ auth_index: "a", recent_requests: [{ time: "15:00-15:10", success: 1, failed: 0 }, { time: "15:10-15:20", success: 2, failed: 0 }] }), NOW);
+    const b = toAccount(credential({ auth_index: "b", recent_requests: [{ time: "15:10-15:20", success: 5, failed: 0 }, { time: "15:20-15:30", success: 7, failed: 0 }] }), NOW);
+    const summary = summariseUsage([a, b], "1h");
+    expect(summary.buckets.map((bucket) => bucket.success)).toEqual([1, 7]);
+    expect(summary.requests).toBe(8);
+  });
 });
 
 describe("records", () => {

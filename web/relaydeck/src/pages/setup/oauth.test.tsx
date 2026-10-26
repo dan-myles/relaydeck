@@ -81,6 +81,31 @@ describe("subscription sign-in", () => {
     expect(popup.close).toHaveBeenCalled();
   });
 
+  it("ends the relay session when cancelled while the sign-in is still starting", async () => {
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const relay = fakeRelay({
+      "POST /v8/management/oauth/auth-url": { body: { status: "ok", url: "https://claude.ai/x", state: "late" } },
+      "DELETE /v8/management/oauth/session?state=late": { body: { status: "ok", cancelled: true } },
+      "GET /v8/management/oauth/status?state=late": { body: { status: "wait" } },
+    });
+    const original = relay.fetchMock.getMockImplementation()!;
+    relay.fetchMock.mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/oauth/auth-url")) await gate;
+      return original(input, init);
+    });
+    fakePopup();
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.click(screen.getByRole("button", { name: /Claude/ }));
+    await screen.findByText("Starting sign-in…");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    release();
+    await waitFor(() => expect(relay.calls.some((call) => call.method === "DELETE" && call.path.endsWith("state=late"))).toBe(true));
+    await act(() => new Promise((resolve) => setTimeout(resolve, 2500)));
+    expect(relay.calls.some((call) => call.path.startsWith("/v8/management/oauth/status"))).toBe(false);
+  }, 10000);
+
   it("explains a provider the relay doesn't offer", async () => {
     fakeRelay({ "POST /v8/management/oauth/auth-url": { status: 404, body: { error: "provider_not_found" } } });
     fakePopup();

@@ -68,13 +68,14 @@ export function RecordsProvider({ client, children }: { client: ManagementClient
       polling.current = true;
       try {
         const raw = await popUsageRecords(client);
-        if (cancelled) return;
+        // The queue already removed these records, so keep them even if
+        // reading stopped while the request was in flight.
         const fresh = raw.map(sanitiseRecord).filter((record): record is RequestRecord => record !== null);
         if (fresh.length > 0) {
           setRecords((current) => [...fresh.reverse(), ...current].slice(0, MAX_RECORDS));
           setLastArrival(new Date());
         }
-        setError(null);
+        if (!cancelled) setError(null);
       } catch (err) {
         if (!cancelled) setError(err);
       } finally {

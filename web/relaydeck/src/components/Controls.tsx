@@ -58,18 +58,41 @@ export function CopyButton({ value, label = "Copy", className = "text-button" }:
     return () => window.clearTimeout(timer);
   }, [state]);
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setState("done");
-    } catch {
-      setState("failed");
-    }
+    setState((await copyText(value)) ? "done" : "failed");
   };
   return (
     <button type="button" className={className} onClick={copy}>
       <span aria-live="polite">{state === "done" ? "Copied" : state === "failed" ? "Copy failed" : label}</span>
     </button>
   );
+}
+
+// The Clipboard API exists only on secure origins; a relay opened over plain
+// HTTP on a LAN address falls back to a hidden textarea.
+export async function copyText(value: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall through to the legacy path.
+  }
+  const area = document.createElement("textarea");
+  area.value = value;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.opacity = "0";
+  document.body.appendChild(area);
+  area.select();
+  let copied = false;
+  try {
+    copied = document.execCommand("copy");
+  } catch {
+    copied = false;
+  }
+  area.remove();
+  return copied;
 }
 
 export type Tone = "live" | "warn" | "bad" | "muted" | "accent";

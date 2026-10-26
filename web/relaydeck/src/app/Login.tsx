@@ -9,9 +9,12 @@ export function loginErrorMessage(error: unknown): string {
     case "unauthorized":
       return "That key wasn't accepted. Repeated wrong keys lock this address out for 30 minutes.";
     case "forbidden":
-      return error.message.includes("remote")
-        ? "This relay only accepts management from its own machine. Turn on management.allow-remote to sign in from here."
-        : error.message || "The relay refused the sign-in.";
+      if (/banned/i.test(error.message)) return `Too many wrong keys from this address. ${error.message}.`;
+      if (/key not set/i.test(error.message)) return "This relay has no management key yet. Set management.secret-key in its config, then restart it.";
+      if (/remote management disabled/i.test(error.message)) {
+        return "This relay only accepts management from its own machine. Turn on management.allow-remote to sign in from here.";
+      }
+      return error.message || "The relay refused the sign-in.";
     case "management-off":
       return "Management is off on this relay. Set management.secret-key in its config, then restart it.";
     case "network":
@@ -21,10 +24,10 @@ export function loginErrorMessage(error: unknown): string {
   }
 }
 
-export function Login({ onSignedIn }: { onSignedIn: (key: string, remember: boolean) => void }) {
+export function Login({ onSignedIn, initialError = null }: { onSignedIn: (key: string, remember: boolean) => void; initialError?: string | null }) {
   const [key, setKey] = useState("");
   const [remember, setRemember] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError);
   const [busy, setBusy] = useState(false);
 
   const submit = async (event: FormEvent) => {

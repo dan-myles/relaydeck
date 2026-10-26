@@ -8,12 +8,14 @@ import type { ProviderKeyEntry, ProviderKeyGroup } from "./types";
 export async function readConfigValue<T>(
   client: ManagementClient,
   path: string,
+  options: { forWrite?: boolean } = {},
 ): Promise<{ value: T | null; etag: string | null }> {
   try {
     const result = await client.request<T>(`/config/${path}`);
     return { value: result.data, etag: result.etag };
   } catch (error) {
     if (error instanceof ApiError && error.kind === "not-found") {
+      if (!options.forWrite) return { value: null, etag: null };
       // The key is absent. The ETag of the whole document still guards the write.
       const whole = await client.request<unknown>("/config");
       return { value: null, etag: whole.etag };
@@ -38,7 +40,7 @@ export async function readUsageRecordsEnabled(client: ManagementClient): Promise
 
 export async function setUsageRecordsEnabled(client: ManagementClient, enabled: boolean): Promise<void> {
   const path = "observability/usage/usage-statistics-enabled";
-  const { etag } = await readConfigValue<boolean>(client, path);
+  const { etag } = await readConfigValue<boolean>(client, path, { forWrite: true });
   await writeConfigValue(client, path, enabled, etag);
 }
 
@@ -93,7 +95,7 @@ export interface NewProviderKey {
 export async function addProviderKey(client: ManagementClient, input: NewProviderKey): Promise<void> {
   const path = `api-keys/${input.provider}`;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { value, etag } = await readConfigValue<ProviderKeyGroup[]>(client, path);
+    const { value, etag } = await readConfigValue<ProviderKeyGroup[]>(client, path, { forWrite: true });
     const groups = Array.isArray(value) ? value.map(stripAuthIndexes) : [];
     if (groups.some((group) => (group.keys ?? []).some((key) => key["api-key"] === input.apiKey))) {
       throw new ApiError(409, "duplicate_key", "This key is already in the relay.");
@@ -167,7 +169,7 @@ export function isKeyPaused(group: ProviderKeyGroup, key: ProviderKeyEntry, prov
 export async function setProviderKeyPaused(client: ManagementClient, provider: string, apiKey: string, paused: boolean): Promise<void> {
   const path = `api-keys/${provider}`;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const { value, etag } = await readConfigValue<ProviderKeyGroup[]>(client, path);
+    const { value, etag } = await readConfigValue<ProviderKeyGroup[]>(client, path, { forWrite: true });
     const groups = Array.isArray(value) ? value.map(stripAuthIndexes) : [];
     let found = false;
     const next = groups.map((group) => {
